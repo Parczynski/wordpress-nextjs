@@ -1,0 +1,76 @@
+version: '3.7'
+
+services:
+
+  certnginx:
+    profiles:
+      - certs
+    image: nginx:1.23
+    volumes:
+      - ./nginx/conf/acme.conf:/etc/nginx/conf.d/acme.conf:ro
+      - ./nginx/acme:/var/www/certbot:ro
+    ports:
+      - 80:80
+      
+  certbot:
+    profiles:
+      - nostart
+    image: certbot/certbot:latest
+    volumes:
+      - ./nginx/acme:/var/www/certbot:rw
+      - ./nginx/certs:/etc/letsencrypt:rw
+
+
+  wordpress:
+    image: wordpress
+    restart: always
+    depends_on:
+      - database
+    environment:
+      TZ: Europe/Moscow
+      WORDPRESS_DB_HOST: "${WPDB_HOST}"
+      WORDPRESS_DB_USER: "${WPDB_USER}"
+      WORDPRESS_DB_PASSWORD: "${WPDB_PASS}"
+      WORDPRESS_DB_NAME: "${WPDB_BASE}"
+    volumes:
+      - ./wordpress:/var/www/html
+  
+  database:
+    image: mariadb:latest
+    environment:
+      MARIADB_USER: "${WPDB_USER}"
+      MARIADB_PASSWORD: "${WPDB_PASS}"
+      MARIADB_ROOT_PASSWORD: "${WPDB_ROOT}"
+      MARIADB_DATABASE: "${WPDB_BASE}"
+    volumes:
+      - ./db:/var/lib/mysql
+      - ./dump.sql:/docker-entrypoint-initdb.d/dump.sql
+
+  nginx:
+    image: nginx:1.23
+    volumes:
+      - ./nginx/conf:/etc/nginx/conf.d:ro
+      - ./nginx/acme:/var/www/certbot:ro
+      - ./nginx/certs:/etc/nginx/ssl:ro
+    depends_on:
+      - wordpress
+      - nextjs
+    ports:
+      - 80:80
+      - 443:443
+
+  nextjs:
+    build: ./nextjs
+    depends_on:
+      - wordpress
+    restart: always
+    environment:
+      TZ: Europe/Moscow
+    volumes:
+      - ./nextjs:/app
+      - exclude_nm:/app/node_modules/
+      - exclude_build:/app/.next/
+
+volumes:
+  exclude_nm:
+  exclude_build:
